@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Textured Sphere with Atmosphere (Babylon.js with WebGL)</title>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <style>
+    html, body {
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const createScene = async (engine) => {
+      const scene = new BABYLON.Scene(engine);
+      
+      // Set the clear color to black
+      scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    
+      // Use PhotoDome for the panoramic image with astronomically large size
+      const dome = new BABYLON.PhotoDome("photoDome", 
+          "https://static.wixstatic.com/media/e480f2_30b181ed195d43c5bd1841d7253eb2bf~mv2.jpg", 
+          { 
+              resolution: 32,
+              size: 1000000000
+          }, 
+          scene
+      );
+      
+      // Rotate the dome by 60 degrees (π/3 radians) on the Y-axis
+      dome.mesh.rotation.x = Math.PI / 3;
+      // Set dome material alpha to 0.5 for semi-transparency
+      dome.material.alpha = 0.3;
+      
+      // Planet Parameters
+      const planetRadius = 63.7;
+      const atmosphereDepth = 0.54;
+      const ringIn = planetRadius * 3;
+      const ringOut = planetRadius * 4;
+      
+      // Star Parameters
+      const starLight = new BABYLON.Color3(1, 0.9, 0.5);
+      const starRadius = 5912
+      const starDistance = 530000
+      const habitableZone = 670500
+      
+      
+      // Create a camera with extended far clipping plane to render distant objects
+      const camera = new BABYLON.ArcRotateCamera("camera1", 0.3, 1.5, (planetRadius * 3), new BABYLON.Vector3(0, 0, 0), scene);
+      camera.attachControl(canvas, true);
+      camera.maxZ = 12000000000;
+      
+      // Add the Default Rendering Pipeline for bloom effect
+      const defaultPipeline = new BABYLON.DefaultRenderingPipeline(
+          "defaultPipeline",
+          true,
+          scene,
+          [camera]
+      );
+      
+      // Configure the bloom effect
+      defaultPipeline.bloomEnabled = true;       // Enable the bloom effect
+      defaultPipeline.bloomThreshold = 0.5;      // Set the bloom threshold for brightness
+      defaultPipeline.bloomWeight = 0.5;         // Set bloom intensity (default 0.15)
+      defaultPipeline.bloomKernel = 64;          // Blur kernel size for the bloom effect
+      defaultPipeline.bloomScale = 0.8;          // Set bloom scaling (default 0.5)
+      
+    
+      // Step 1: Create a white sphere to act as the light source
+      const lightSphere = BABYLON.MeshBuilder.CreateSphere("lightSphere", { diameter: starRadius * 2 }, scene); // Adjust size if needed
+      const lightMaterial = new BABYLON.StandardMaterial("lightMaterial", scene);
+      
+      // Load the star texture
+      const starTexture = new BABYLON.Texture("https://static.wixstatic.com/media/e480f2_05643bb595f04150828196a65fd414f5~mv2.jpg", scene);
+      
+      // Assign the texture to the emissiveTexture to make it "glow"
+      lightMaterial.diffuseTexture = starTexture;
+      lightMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);   // No diffuse light since it's emissive
+      lightMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      lightMaterial.emissiveColor = starLight;
+      lightSphere.material = lightMaterial;
+      
+      // Position the light sphere (adjust the position as needed)
+      const position = new BABYLON.Vector3(0, 0, starDistance);
+      lightSphere.position = position;
+      
+      // Step 2: Create a point light that originates from the sphere's position
+      const pointLight = new BABYLON.PointLight("pointLight", position, scene);
+      pointLight.diffuse = starLight;  // White light
+      pointLight.specular = starLight; // White specular highlights
+      pointLight.intensity = 1;  // Adjust intensity as needed
+      pointLight.radius = 500;   // Control how far the light spreads
+      
+       // Step 3: Create a Volumetric Light Scattering PostProcess for "godrays" effect
+      const volLight = new BABYLON.VolumetricLightScatteringPostProcess(
+          "godrays",
+          1.0,  // Ratio: Set to 1 for full screen coverage
+          camera,
+          lightSphere,  // The source mesh to scatter light from
+          100,   // Samples for quality (higher = better quality but slower performance)
+          BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+          scene.getEngine(),
+          false  // Don't use depth (usually false for godrays)
+      );
+      
+      // Customize the intensity and properties of the godrays effect
+      volLight.exposure = 0.4;   // Control brightness
+      volLight.decay = 0.95;      // Light decay over distance
+      volLight.weight = 0.7;      // Impact of the godrays
+      volLight.density = 1.8;     // Thickness of light beams
+      
+      // Step 4: Add a glow effect to enhance the volumetric feel (optional)
+      const glowLayer = new BABYLON.GlowLayer("glow", scene);
+      glowLayer.intensity = 0;  // Control glow intensity
+      glowLayer.addIncludedOnlyMesh(lightSphere);  // Apply glow effect only to the light sphere
+          
+      // Step 5: Adjust the Light Intensity Based on Distance
+      const maxDistance = habitableZone * 20;  // Set a maximum distance where the light intensity approaches zero
+      const minIntensity = 0.1;  // The minimum intensity (to avoid the light being completely off)
+      const maxIntensity = 1.0;    // The default intensity when close
+          
+      // Calculate intensity based on distance, clamped between min and max values
+      const intensity = BABYLON.Scalar.Clamp(maxDistance / (starDistance), minIntensity, maxIntensity);
+      pointLight.intensity = intensity;
+      
+      
+      // Step 6: Starlight that increases in size with distance
+      const imageScale = 5000 * (starDistance / 50000) * ((intensity * intensity) + 0.1);
+      const imagePlane = BABYLON.MeshBuilder.CreatePlane("imagePlane", { width: imageScale, height: imageScale / 2 }, scene);
+      const imageMaterial = new BABYLON.StandardMaterial("imageMaterial", scene);
+      const imageTexture = new BABYLON.Texture("https://static.wixstatic.com/media/e480f2_c7d081692b0c4f099293f98ec73e9c84~mv2.png", scene);
+      
+      // Apply the texture to the material
+      imageTexture.hasAlpha = true;
+      imageMaterial.diffuseTexture = imageTexture;
+      imageMaterial.alpha = 0.3;
+      imageMaterial.useAlphaFromDiffuseTexture = true;
+      imageMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+      imageMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      imageMaterial.emissiveColor = starLight;
+      imagePlane.material = imageMaterial;
+      
+      // Enable alpha blending and set culling
+      imageMaterial.backFaceCulling = true;
+      imagePlane.material = imageMaterial;
+      imagePlane.position = new BABYLON.Vector3(0, 0, starDistance);
+      imagePlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+      
+       // Step 7: Create a Volumetric Light Scattering PostProcess for "godrays" effect
+      const volLight2 = new BABYLON.VolumetricLightScatteringPostProcess(
+          "godrays",
+          1.0,  // Ratio: Set to 1 for full screen coverage
+          camera,
+          imagePlane,  // The source mesh to scatter light from
+          100,   // Samples for quality (higher = better quality but slower performance)
+          BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+          scene.getEngine(),
+          false  // Don't use depth (usually false for godrays)
+      );
+      
+      // Customize the intensity and properties of the godrays effect
+      volLight2.exposure = 0.4;   // Control brightness
+      volLight2.decay = 0.95;      // Light decay over distance
+      volLight2.weight = 0.7;      // Impact of the godrays
+      volLight2.density = 2.8;     // Thickness of light beams
+
+    
+      // Add planet surface base layer
+      const texture = new BABYLON.Texture("https://static.wixstatic.com/media/e480f2_b938ec1d822749b7b6c78455e3936aa2~mv2.png", scene);
+      texture.vScale = -1;
+      texture.uScale = -1;
+      const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: planetRadius * 2 }, scene);
+      const sphereMaterial = new BABYLON.StandardMaterial("sphereMaterial", scene);
+      
+      sphereMaterial.diffuseTexture = texture;
+      sphereMaterial.specularColor = new BABYLON.Color3(1, 0.9, 0.9);
+      sphereMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0);
+      sphereMaterial.diffuseColor = new BABYLON.Color3(0.7, 0.7, 0.7);
+      sphere.material = sphereMaterial;
+      
+      sphere.position = new BABYLON.Vector3(0, 0, 0);
+
+      // Add GlowLayer for glowing effect
+      const glow2Layer = new BABYLON.GlowLayer("glow2", scene);
+      glow2Layer.intensity = 0.0;
+      
+      // Add land layer with diffuse texture and alpha transparency
+      const landTexture = new BABYLON.Texture("https://static.wixstatic.com/media/e480f2_4791012990bb449a940f6818a1f2057c~mv2.png", scene);
+      landTexture.vScale = -1;
+      landTexture.uScale = -1;
+      landTexture.hasAlpha = true;
+      
+      const landLayer = BABYLON.MeshBuilder.CreateSphere("landLayer", { diameter: planetRadius * 2 }, scene);
+      const landMaterial = new BABYLON.StandardMaterial("landMaterial", scene);
+      
+      // Assign landTexture as the base texture
+      landMaterial.diffuseTexture = landTexture;
+      landMaterial.useAlphaFromDiffuseTexture = true;
+      landMaterial.backFaceCulling = true;
+      landMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      landMaterial.diffuseColor = new BABYLON.Color3(0.7, 0.6, 0.6);
+      landMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0);
+      landLayer.material = landMaterial;
+      
+      // Add glow effect for the land layer
+      glow2Layer.addIncludedOnlyMesh(landLayer);
+      
+      
+      // Shared properties for the ring
+      const ringTexture = new BABYLON.Texture("https://static.wixstatic.com/media/e480f2_6dd6e9ab5cab4c528e169a2803d07b8d~mv2.png", scene);
+      ringTexture.hasAlpha = true;
+      
+      // Ring Torus
+      const ringTorus = BABYLON.MeshBuilder.CreateTorus("ringTorus", {
+          diameter: ringOut,
+          thickness: (ringOut - ringIn),
+          tessellation: 64
+      }, scene);
+      
+      ringTorus.scaling = new BABYLON.Vector3(1, 0.0001, 1);
+      const ringColor = new BABYLON.Color3(0.6, 0.6, 0.6) // Constant ring color variable
+      
+      const ringMaterial = new BABYLON.StandardMaterial("ringTorusMat", scene);
+      ringMaterial.diffuseTexture = ringTexture;
+      ringMaterial.useAlphaFromDiffuseTexture = true;
+      ringMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+      ringMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      ringMaterial.emissiveColor = ringColor.multiply(starLight.scale(intensity));
+      ringTorus.material = ringMaterial;
+      
+      // Front Ring
+      const ring2Torus = BABYLON.MeshBuilder.CreateTorus("ring2Torus", {
+          diameter: ringOut,
+          thickness: (ringOut - ringIn),
+          tessellation: 64
+      }, scene);
+      
+      ring2Torus.scaling = new BABYLON.Vector3(1, 0.0001, 1);
+      const ring2Material = new BABYLON.StandardMaterial("ringTorusMat", scene);
+      ring2Material.diffuseTexture = ringTexture;
+      ring2Material.useAlphaFromDiffuseTexture = true;
+      ring2Material.diffuseColor = new BABYLON.Color3(0, 0, 0);
+      ring2Material.specularColor = new BABYLON.Color3(0, 0, 0);
+      ring2Material.emissiveColor = ringColor.multiply(starLight.scale(intensity));
+      ring2Torus.material = ring2Material;
+      
+      // Clipping of Ring
+      ringMaterial.clipPlane = new BABYLON.Plane(1, 0, 0, -planetRadius);
+      ring2Material.clipPlane = new BABYLON.Plane(-1, 0, 0, planetRadius);
+      
+      
+      // Shadow Torus
+      const shadowTorus = BABYLON.MeshBuilder.CreateTorus("shadowTorus", {
+          diameter: ringOut,
+          thickness: (ringOut - ringIn),
+          tessellation: 64
+      }, scene);
+      
+      shadowTorus.scaling = new BABYLON.Vector3(1, 0.002, 1);
+      
+      const shadowMaterial = new BABYLON.StandardMaterial("shadowTorusMat", scene);
+      shadowMaterial.diffuseTexture = ringTexture;
+      shadowMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+      shadowMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      shadowTorus.material = shadowMaterial;
+      
+      // Create clip planes 
+      shadowMaterial.clipPlane2 = new BABYLON.Plane(1, 0, 0, -planetRadius);
+      shadowMaterial.clipPlane3 = new BABYLON.Plane(0, 0, 1, -planetRadius);
+      shadowMaterial.clipPlane4 = new BABYLON.Plane(-1, 0, 0, -planetRadius);
+      
+
+      // Create cloud layer
+      const cloudTexture = new BABYLON.Texture("https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Transparent_Fair_Weather_Clouds_Map.png/1600px-Transparent_Fair_Weather_Clouds_Map.png?20160813214037", scene);
+      cloudTexture.vScale = -1;
+      cloudTexture.uScale = -1;
+      cloudTexture.hasAlpha = true;
+    
+      const cloudLayer = BABYLON.MeshBuilder.CreateSphere("cloudLayer", { diameter: planetRadius * 2.005 }, scene);
+      const cloudMaterial = new BABYLON.StandardMaterial("cloudMaterial", scene);
+      cloudMaterial.diffuseTexture = cloudTexture;
+      cloudMaterial.useAlphaFromDiffuseTexture = true;
+      cloudMaterial.backFaceCulling = true;
+      cloudMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      cloudLayer.material = cloudMaterial;
+      
+      
+      // Create atmosphere material with Fresnel effect
+      const atmosphereMaterial = new BABYLON.StandardMaterial("atmosphereMaterial", scene);
+      atmosphereMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.7, 1);
+      atmosphereMaterial.alpha = 0.27;
+      atmosphereMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      
+      const opacityFresnel = new BABYLON.FresnelParameters();
+      opacityFresnel.bias = 0.6;
+      opacityFresnel.power = 1.0;
+      opacityFresnel.leftColor = new BABYLON.Color3(1, 1, 1);
+      opacityFresnel.rightColor = new BABYLON.Color3(0.0, 0.0, 0.0);
+      
+      atmosphereMaterial.opacityFresnelParameters = opacityFresnel;
+      
+      const atmosphere = BABYLON.MeshBuilder.CreateSphere("atmosphere", { diameter: planetRadius * 2.007 }, scene);
+      atmosphere.material = atmosphereMaterial;
+      
+      // Set rendering group IDs
+      sphere.renderingGroupId = 1;
+      landLayer.renderingGroupId = 1;
+      cloudLayer.renderingGroupId = 1;
+      atmosphere.renderingGroupId = 1;
+      shadowTorus.renderingGroupId = 1;
+      ringTorus.renderingGroupId = 0;
+      ring2Torus.renderingGroupId = 2;
+      lightSphere.renderingGroupId = 0;
+      imagePlane.renderingGroupId = 1;
+      
+      
+      // Rotates rings to follow camera
+      scene.registerBeforeRender(() => {
+          // Rotating the planet and its layers
+          sphere.rotation.y -= planetRotationSpeed;
+          landLayer.rotation.y -= landRotationSpeed;
+          cloudLayer.rotation.y -= cloudRotationSpeed;
+      
+          // Get player's position relative to the planet
+          const playerPosition = camera.position;
+          const planetPosition = sphere.position; // Assuming the planet is centered at (0, 0, 0)
+          const deltaX = playerPosition.x - planetPosition.x;
+          const deltaZ = playerPosition.z - planetPosition.z;
+      
+          // Calculate the player's horizontal angle relative to the planet (in the XZ plane)
+          const playerAngleY = Math.atan2(deltaZ, deltaX);
+      
+          // Update the clipping planes based on player's angle
+          ringMaterial.clipPlane = new BABYLON.Plane(Math.cos(playerAngleY), 0, Math.sin(playerAngleY), -planetRadius);
+          ring2Material.clipPlane = new BABYLON.Plane(-Math.cos(playerAngleY), 0, -Math.sin(playerAngleY), planetRadius);
+          
+          let playerAngleYDegrees = BABYLON.Tools.ToDegrees(playerAngleY); // Convert to degrees
+          
+          // Check angle thresholds in degrees
+          if (playerAngleYDegrees > 0 && playerAngleYDegrees < 180) {
+              shadowTorus.renderingGroupId = 1;
+          } else {
+              shadowTorus.renderingGroupId = 3;
+          }
+      });
+      
+      
+      // Sets rotation of planet
+      const planetRotationSpeed = 0.001;
+      const landRotationSpeed = 0.001;
+      const cloudRotationSpeed = 0.0008;
+      
+      // Animation loop
+      scene.registerBeforeRender(() => {
+          sphere.rotation.y -= planetRotationSpeed;
+          landLayer.rotation.y -= landRotationSpeed;
+          cloudLayer.rotation.y -= cloudRotationSpeed;
+      });
+
+      return scene;
+    };
+
+    window.addEventListener('DOMContentLoaded', (event) => {
+      const engine = new BABYLON.Engine(canvas, true);
+      createScene(engine).then(scene => {
+        engine.runRenderLoop(() => {
+          scene.render();
+        });
+      });
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
+    });
+  </script>
+</body>
+</html>

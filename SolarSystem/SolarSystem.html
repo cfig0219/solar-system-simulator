@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Textured Sphere with Atmosphere (Babylon.js with WebGL)</title>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <style>
+    html, body {
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <script type="module">
+    // Imports functions from Star and Planet files
+    import { Star } from './Star.js';
+    import { Planet } from './Planet.js';
+    import { Rings } from './Rings.js';
+    import { Player } from '/Player.js';
+    
+    const canvas = document.getElementById("renderCanvas");
+    const createScene = async (engine) => {
+      const scene = new BABYLON.Scene(engine);
+      
+      // Set the clear color to black
+      scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    
+      // Use PhotoDome for the panoramic image with astronomically large size
+      const dome = new BABYLON.PhotoDome("photoDome", 
+          'Textures/Sky/3dspace.jpg', 
+          { 
+              resolution: 32,
+              size: 1000000000000 // range increased
+          }, 
+          scene
+      );
+      
+      // Rotate the dome by 60 degrees (π/3 radians) on the Y-axis
+      dome.mesh.rotation.x = Math.PI / 3;
+    
+      // Creates a player object that utilizes a controllable camera
+      const camera = new BABYLON.ArcRotateCamera("camera1", 0.3, 1.5, (3000), new BABYLON.Vector3(0, 0, 0), scene);
+      camera.attachControl(canvas, true);
+      const player = new Player(camera, scene);
+      
+      // Add the Default Rendering Pipeline for bloom effect
+      const defaultPipeline = new BABYLON.DefaultRenderingPipeline(
+          "defaultPipeline",
+          true,
+          scene,
+          [camera]
+      );
+      
+      // Configure the bloom effect
+      defaultPipeline.bloomEnabled = true;       // Enable the bloom effect
+      defaultPipeline.bloomThreshold = 0.5;      // Set the bloom threshold for brightness
+      defaultPipeline.bloomWeight = 0.5;         // Set bloom intensity (default 0.15)
+      defaultPipeline.bloomKernel = 64;          // Blur kernel size for the bloom effect
+      defaultPipeline.bloomScale = 0.8;          // Set bloom scaling (default 0.5)
+
+        
+      // Calls function to create first yellow star
+      const CanaanLight = new BABYLON.Color3(1, 0.9, 0.5);
+      const CanaanRadius = 52220;
+      const CanaanDistance = 179026 + CanaanRadius;
+      const CanaanHabitableZone = 200710 + CanaanRadius;
+	  const CanaanPosition = new BABYLON.Vector3(0, 0, CanaanDistance);
+      const Canaan = new Star(CanaanLight, CanaanRadius, CanaanPosition, CanaanHabitableZone, scene, camera);
+        
+      // Second red star
+      const SinaiLight = new BABYLON.Color3(1, 0.35, 0.1);
+      const SinaiRadius = 12998;
+      const SinaiDistance = 1465774 + SinaiRadius;
+      const SinaiHabitableZone = 15546 + SinaiRadius;
+	  const SinaiPosition = new BABYLON.Vector3(SinaiDistance/2, 0, -SinaiDistance);
+	  const Sinai = new Star(SinaiLight, SinaiRadius, SinaiPosition, SinaiHabitableZone, scene, camera);
+        
+      // Third red-orange star
+      const MizraimLight = new BABYLON.Color3(1, 0.5, 0.2);
+      const MizraimRadius = 23100;
+      const MizraimDistance = 10365600 + MizraimRadius;
+      const MizraimHabitableZone = 52680 + MizraimRadius;
+	  const MizraimPosition = new BABYLON.Vector3(-MizraimDistance/2, 0, -MizraimDistance);
+	  const Mizraim = new Star(MizraimLight, MizraimRadius, MizraimPosition, MizraimHabitableZone, scene, camera);
+
+      
+      // First Planet parameters
+      const EdenRadius = 1162;
+      const atmosphereDepth = 50.8;
+      const EdenLocation = new BABYLON.Vector3(0, 0, 0);
+      camera.radius = EdenRadius * 3; // adjusts default camera distance
+      
+      // Calls on function to create first planet
+      const Eden = new Planet(EdenRadius, EdenLocation, scene, camera);
+      const starIntensity1 = Canaan.calculateIntensity(EdenLocation, CanaanPosition);
+      const EdenRings = new Rings(EdenRadius, EdenLocation, CanaanLight, starIntensity1, CanaanPosition, scene, camera);
+      
+      // Second planet parameters
+      const NysaRadius = 2958;
+      const NysaLocation = new BABYLON.Vector3(10000, 0, 0);
+      const NysaTexture = new BABYLON.Texture('Textures/Nysa/NysaMap.png', scene);
+      const NysaLand = new BABYLON.Texture('Textures/Nysa/NysaLand.png', scene);
+      const NysaClouds = new BABYLON.Texture('Textures/Clouds/EarthClouds2.png', scene);
+      const atmosphereColor = new BABYLON.Color3(1, 0.7, 1);
+      const cloudColor = new BABYLON.Color3(0.9, 0.8, 0.7);
+      const ringColor2 = new BABYLON.Color3(0.6, 0.75, 1) // Constant ring color variable
+      
+      // Creates second planet
+      const Nysa = new Planet(NysaRadius, NysaLocation, scene, camera);
+      Nysa.setTexture(NysaTexture);
+      Nysa.setLand(NysaLand);
+      Nysa.setClouds(NysaClouds);
+      Nysa.setAtmosphereColor(atmosphereColor);
+      Nysa.setCloudColor(cloudColor);
+      Nysa.setAtmosphereOpacity(0.24);
+      
+      // Calculates intensity of lights for second rings
+      //const starIntensity2 = Canaan.calculateIntensity(NysaLocation, CanaanPosition);
+      //const NysaRings = new Rings(NysaRadius, NysaLocation, CanaanLight, starIntensity2, CanaanPosition, scene, camera);
+      //NysaRings.setRingColor(ringColor2);
+      
+      // Creates third planet
+      const AraratRadius = 1560;
+      const AraratLocation = new BABYLON.Vector3(-10000, 0, 0);
+      const AraratTexture = new BABYLON.Texture('Textures/Ararat/AraratMap.png', scene);
+      const AraratLand = new BABYLON.Texture('Textures/Ararat/AraratLand.png', scene);
+      const AraratClouds = new BABYLON.Texture('Textures/Clouds/EarthClouds2.png', scene);
+      
+      const Ararat = new Planet(AraratRadius, AraratLocation, scene, camera);
+      Ararat.setTexture(AraratTexture);
+      Ararat.setLand(AraratLand);
+      Ararat.setClouds(AraratClouds);
+      Ararat.setAtmosphereOpacity(0.22);
+
+
+      return scene;
+    };
+
+    window.addEventListener('DOMContentLoaded', (event) => {
+      const engine = new BABYLON.Engine(canvas, true);
+      createScene(engine).then(scene => {
+        engine.runRenderLoop(() => {
+          scene.render();
+        });
+      });
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
+    });
+  </script>
+</body>
+</html>

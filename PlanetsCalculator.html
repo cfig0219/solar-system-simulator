@@ -1,0 +1,158 @@
+<html>
+
+<head>
+	<title>JavaScript Calculator</title>
+
+	<!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	
+	<style>
+        /* Add style */
+		.row {
+			display: flex; /* Makes the columns horizontal */
+            align-items: center;
+        }
+      
+        .col-0,
+		.col-1,
+        .col-2,
+        .col-3 {
+            margin: 5px;
+            padding: 10px;
+        }
+	</style>
+</head>
+	
+<body>
+
+    <!-- Input for Game Gravity -->	
+	<div class="row">
+    	<div class="col-3">
+        	Real Gravity (m/s^2)
+    	</div>
+    	<div class="col-2">
+        	<input type="number" value="0" class="val" id="real_g" />
+    	</div>
+    	<div class="col-1">
+        	<input type="number" readonly value="0" id="game_g" />
+    	</div>
+    	<div class="col-0">
+        	Game Gravity (m/s^2)
+    	</div>
+	</div>
+	
+	<!-- Input for Game Radius -->
+	<div class="row">
+    	<div class="col-3">
+        	Real Radius (kilometers)
+    	</div>
+    	<div class="col-2">
+        	<input type="number" value="0" class="val" id="real_r" />
+    	</div>
+    	<div class="col-1">
+        	<input type="number" readonly value="0" id="game_r" />
+    	</div>
+    	<div class="col-0">
+        	Game Radius (meters)
+    	</div>
+	</div>
+	
+	<!-- Output for Game Orbit/Escape Velocity -->
+	<div class="row">
+	    <div class="col-3">
+	        Game Orbit Velocity (m/s)
+	    </div>
+	    <div class="col-2">
+	        <input type="number" readonly value="0" id="game_o" />
+	    </div>
+	    <div class="col-1">
+	        <input type="number" readonly value="0" id="game_e" />
+	    </div>
+	    <div class="col-0">
+	        Game Escape Velocity (m/s)
+	    </div>
+	</div>
+	
+	<!-- Output for Air Pressure/Air Engine Output Factor -->
+	<div class="row">
+	    <div class="col-3">
+	        Air Pressure (atmospheres)
+	    </div>
+	    <div class="col-2">
+	        <input type="number" value="0" class="val" id="pressure" />
+	    </div>
+	    <div class="col-1">
+	        <input type="number" readonly value="0" id="engine" />
+	    </div>
+	    <div class="col-0">
+	        Air Engine Output Factor
+	    </div>
+	</div>
+	
+	<!-- Output for Atmosphere height -->
+	<div class="row">
+	    <div class="col-3">
+	        Game Radius (meters)
+	    </div>
+	    <div class="col-2">
+	        <input type="number" value="0" class="val" id="radius" />
+	    </div>
+	    <div class="col-1">
+	        <input type="number" readonly value="0" id="atmosphere" />
+	    </div>
+	    <div class="col-0">
+	        Game Atmosphere (meters)
+	    </div>
+	</div>
+
+	<script>
+		function calculateTotal()
+		{
+		  // Formula Variables
+		  let game_calc={}
+		  let minR = 50;
+		  let midR = 2548;
+		  let minG = 2;
+		  let midG = 9.8;
+		  let earthR = 6378; //km
+		  let earthG = 9.8; //(m/s)^2
+		  
+		  // Calculations for Game Gravity (m/s^2)
+		  game_calc.gravity = (Math.sqrt($("#real_g").val()/earthG) * (midG) )
+		  $("#game_g").val(game_calc.gravity);
+		  
+		  // Calculations for Game Radius (meters)
+		  game_calc.radius = (Math.pow(($("#real_r").val()/earthR), 1/1.5) * (midR) )
+		  $("#game_r").val(game_calc.radius);
+		  
+		  // Gravity Variables
+		  let gConstant = 0.000000000067
+		  let gameG = game_calc.gravity;
+		  let gameR = game_calc.radius;
+		  let mass = (gameG * Math.pow(gameR,2)) / gConstant;
+		  
+		  // Game Orbit Velocity (m/s)
+		  game_calc.orbit = ( Math.sqrt( (mass*gConstant) / gameR ) )
+		  $("#game_o").val(game_calc.orbit);
+		  
+		  // Game Escape Velocity (m/s)
+		  game_calc.escvel = ( Math.sqrt( (2*mass*gConstant) / gameR ) )
+		  $("#game_e").val(game_calc.escvel);
+		  
+		  // Air Pressure Engine Factor (atm)
+		  game_calc.pressure = (Math.cbrt($("#pressure").val()/1) * (1) )
+		  $("#engine").val(game_calc.pressure);
+		  
+		  // Atmosphere Height
+		  game_calc.atmosphere = (Math.cbrt($("#radius").val()/midR) * (100) )
+		  $("#atmosphere").val(game_calc.atmosphere);
+		}
+		
+		$(function()
+		 {
+		    $(".val").on("change keyup",calculateTotal)
+		})
+	</script>
+</body>
+
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket with Rotation and Acceleration</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid #000;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="1000" height="700"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const canvasWidth = 1000;
+    const canvasHeight = 700;
+
+    // Circle (Earth) properties
+    const circleX = 400; // X coordinate of the circle's center
+    const circleY = 300; // Y coordinate of the circle's center
+    const radius = 200;  // Radius of the circle
+
+    // Ship (Rocket) properties
+    const rocketWidth = 60; // Rocket width
+    const rocketHeight = 60; // Rocket height
+    let squareX = canvasWidth - rocketWidth - 20; // Rocket starting X position
+    let squareY = canvasHeight / 2 - rocketHeight / 2; // Rocket starting Y position
+    let velocityX = 0.0; 
+    let velocityY = 0.0;
+    let shipAngle = 0; // Angle of the ship in degrees
+    const acceleration = 0.5; // Acceleration value
+    const angleIncrement = 10; // Increment by which the angle changes
+
+    // Physics constants
+    const gravityConstant = 6.67430e-11; // Gravitational constant (G)
+    const planetMass = 30000000000000;   // Mass of the planet (M)
+    const spacecraftMass = 1000;         // Mass of the spacecraft (m)
+
+    // Load space background image
+    const spaceImage = new Image();
+    spaceImage.src = 'Textures/space.jpg'; // Path to your space background image
+
+    // Load Earth image
+    const earthImage = new Image();
+    earthImage.src = 'Textures/earth.png'; // Path to your Earth image
+
+    // Load rocket image (spacecraft)
+    const rocketImage = new Image();
+    rocketImage.src = 'Textures/rocket.png'; // Path to your rocket image
+
+    // Draw the space background
+    function drawSpaceBackground() {
+        ctx.drawImage(spaceImage, 0, 0, canvasWidth, canvasHeight);
+    }
+
+    // Draw the Earth image inside the circle
+    function drawEarth() {
+        ctx.save(); // Save the context state
+        ctx.beginPath();
+        ctx.arc(circleX, circleY, radius, 0, Math.PI * 2); // Create the circular clip
+        ctx.clip(); // Clip to this circle
+        ctx.drawImage(earthImage, circleX - radius, circleY - radius, radius * 2, radius * 2); // Draw Earth image
+        ctx.restore(); // Restore the context
+    }
+
+    // Draw the rocket with rotation based on shipAngle
+    function drawRocket() {
+        ctx.save(); // Save the current state of the context
+        ctx.translate(squareX + rocketWidth / 2, squareY + rocketHeight / 2); // Translate to the center of the rocket
+        ctx.rotate(shipAngle * Math.PI / 180); // Rotate the rocket based on the angle
+        ctx.drawImage(rocketImage, -rocketWidth / 2, -rocketHeight / 2, rocketWidth, rocketHeight); // Draw the rocket centered at the translation point
+        ctx.restore(); // Restore the context to the previous state
+    }
+
+    // Check if the rocket is inside the circle (Earth image)
+    function isInsideCircle(x, y) {
+        const distX = x - circleX + rocketWidth / 2;
+        const distY = y - circleY + rocketHeight / 2;
+        const distance = Math.sqrt(distX * distX + distY * distY);
+        return distance + rocketWidth / 2 < radius; // Rocket inside the circle
+    }
+
+    // Apply gravity to the rocket (spacecraft)
+    function applyGravity() {
+        // Calculate the distance between the rocket's center and the Earth's center
+        const distX = (circleX - (squareX + rocketWidth / 2));
+        const distY = (circleY - (squareY + rocketHeight / 2));
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        if (distance > 0) { // Avoid division by zero
+            // Newton's law of universal gravitation
+            const force = (gravityConstant * planetMass * spacecraftMass) / (distance * distance);
+
+            // Calculate acceleration in x and y directions (normalize the direction vector)
+            const accelX = (distX / distance) * force / spacecraftMass;
+            const accelY = (distY / distance) * force / spacecraftMass;
+
+            // Update velocity based on gravitational acceleration
+            velocityX += accelX;
+            velocityY += accelY;
+        }
+    }
+
+    // Update rocket position based on its velocity
+    function updateRocketPosition() {
+        // Apply gravity to the rocket
+        applyGravity();
+
+        // Update the position based on velocity (use floating-point precision)
+        squareX += velocityX;
+        squareY += velocityY;
+
+        // Prevent the rocket from entering the Earth (circle)
+        if (isInsideCircle(squareX, squareY)) {
+            squareX -= velocityX; // Revert to previous position
+            squareY -= velocityY;
+            velocityX = 0; // Stop the velocity if it hits the Earth
+            velocityY = 0;
+        }
+
+        drawGame(); // Redraw the game with updated position
+    }
+
+    // Handle key presses for acceleration and angle rotation
+    function accelerate(e) {
+        if (e.key === 'w' || e.key === 'W') {
+            // Accelerate in the direction of the ship's current angle
+            velocityX += Math.cos((shipAngle+270) * Math.PI / 180) * acceleration;
+            velocityY += Math.sin((shipAngle+270) * Math.PI / 180) * acceleration;
+        }
+        if (e.key === 's' || e.key === 'S') {
+            // Decelerate in the direction of the ship's current angle
+            velocityX -= Math.cos((shipAngle+270) * Math.PI / 180) * acceleration;
+            velocityY -= Math.sin((shipAngle+270) * Math.PI / 180) * acceleration;
+        }
+        
+        if (e.key === 'q' || e.key === 'Q') {
+            // Accelerate to the left
+            velocityX -= Math.cos(shipAngle * Math.PI / 180) * acceleration;
+            velocityY -= Math.sin(shipAngle * Math.PI / 180) * acceleration;
+        }
+        if (e.key === 'e' || e.key === 'E') {
+            // Accelerate to the right
+            velocityX += Math.cos(shipAngle * Math.PI / 180) * acceleration;
+            velocityY += Math.sin(shipAngle * Math.PI / 180) * acceleration;
+        }
+        if (e.key === 'a' || e.key === 'A') {
+            // Rotate ship counterclockwise (increase angle)
+            shipAngle -= angleIncrement;
+        }
+        if (e.key === 'd' || e.key === 'D') {
+            // Rotate ship clockwise (decrease angle)
+            shipAngle += angleIncrement;
+        }
+    }
+
+    // Draw the entire game
+    function drawGame() {
+        drawSpaceBackground(); // Draw the space background first
+        drawEarth();           // Draw the Earth on top
+        drawRocket();          // Draw the rocket (spacecraft) on top of Earth
+    }
+
+    // Initial drawing when all images are loaded
+    let imagesLoaded = 0;
+    spaceImage.onload = earthImage.onload = rocketImage.onload = function () {
+        imagesLoaded++;
+        if (imagesLoaded === 3) drawGame(); // Draw game when all images are loaded
+    };
+
+    // Listen for key presses to accelerate the rocket and rotate
+    window.addEventListener('keydown', accelerate);
+
+    // Continuously update rocket's position and velocity
+    function gameLoop() {
+        updateRocketPosition();
+        requestAnimationFrame(gameLoop); // Keep the game running
+    }
+
+    // Start the game loop
+    gameLoop();
+</script>
+
+</body>
+</html>
